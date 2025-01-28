@@ -40,3 +40,23 @@ joke = CreateApplicationCommandChatInput
       , createDefaultMemberPermissions = Nothing
       , createDMPermission = Just False
       }
+dogimage :: CreateApplicationCommand
+dogimage = CreateApplicationCommandChatInput
+         { createName = "dogimage"
+         , createDescription = "random dog image"
+         , createLocalizedName = Nothing
+         , createLocalizedDescription = Nothing
+         , createOptions = Nothing
+         , createDefaultMemberPermissions = Nothing
+         , createDMPermission = Just False
+         }
+foximage :: CreateApplicationCommand
+foximage = CreateApplicationCommandChatInput
+         { createName = "foximage"
+         , createDescription = "random fox image"
+         , createLocalizedName = Nothing
+         , createLocalizedDescription = Nothing
+         , createOptions = Nothing
+         , createDefaultMemberPermissions = Nothing
+         , createDMPermission = Just False
+         }
