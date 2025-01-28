@@ -60,3 +60,13 @@ foximage = CreateApplicationCommandChatInput
          , createDefaultMemberPermissions = Nothing
          , createDMPermission = Just False
          }
+minecraftR :: CreateApplicationCommand
+minecraftR = CreateApplicationCommandChatInput
+          { createName = "craft"
+          , createDescription = "random minecraft item"
+          , createLocalizedName = Nothing
+          , createLocalizedDescription = Nothing
+          , createOptions = Nothing
+          , createDefaultMemberPermissions = Nothing
+          , createDMPermission = Just False
+          }
