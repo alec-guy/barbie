@@ -106,7 +106,7 @@ catEmbed caturl width height = CreateEmbed { createEmbedAuthorName = "Barbie Cat
                                                             th = T.pack $ show height
                                                         in tw `ta` " x " `ta` th
                               , createEmbedFooterIcon = Nothing
-                              , createEmbedColor = Just $ DiscordColorRed
+                              , createEmbedColor = Just $ DiscordColorLuminousVividPink
                               , createEmbedTimestamp = Nothing
                               }
 eventHandler :: Text -> Event -> DiscordHandler ()
