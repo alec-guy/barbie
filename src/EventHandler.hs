@@ -27,6 +27,10 @@ import Data.Maybe (fromJust)
 import Data.Scientific
 
 
+data Dog = Dog {message :: Text, status :: Text} deriving (Show, Generic)
+
+instance FromJSON Dog
+
 data Joke = Joke Text Text Text Text deriving (Show)
 
 instance FromJSON Joke where
@@ -40,7 +44,8 @@ instance FromJSON Joke where
           (Just (String t), Just (String s), Just (String p), Just (Number i)) ->
                        return $ Joke t s p (T.pack $ show $ fromJust $ (toBoundedInteger i :: Maybe Int))
           _                                        -> return $ Joke "" "" "" ""
-
+data Fox = Fox {image :: Text} deriving (Show, Generic)
+instance FromJSON Fox
 
 data Cat = Cat {
          breeds :: [Text],
@@ -64,6 +69,11 @@ instance FromJSON CatArray where
         return $ CatArray cats
 
 
+foxRequest :: IO Network.HTTP.Simple.Request
+foxRequest = parseRequest $ T.unpack "https://randomfox.ca/floof"
+
+dogRequest :: IO Network.HTTP.Simple.Request
+dogRequest = parseRequest $ T.unpack "https://dog.ceo/api/breeds/image/random"
 
 jokeRequest :: IO Network.HTTP.Simple.Request
 jokeRequest = parseRequest $ T.unpack "https://official-joke-api.appspot.com/random_joke"
@@ -79,7 +89,61 @@ jokeMsg typ setup punch =
 heartMessage :: InteractionResponseMessage
 heartMessage = interactionResponseMessageBasic "❤️"
 
+foxEmbed :: Text -> CreateEmbed
+foxEmbed foxurl = CreateEmbed
+                { createEmbedAuthorName = "Barbie Fox"
+                , createEmbedAuthorUrl  = ""
+                , createEmbedAuthorIcon = Nothing
+                , createEmbedUrl        = foxurl
+                , createEmbedTitle      = ""
+                , createEmbedThumbnail  = Nothing
+                , createEmbedFields     = []
+                , createEmbedImage = Just $ CreateEmbedImageUrl foxurl
+                , createEmbedFooterText  = ""
+                , createEmbedFooterIcon = Nothing
+                , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
+                , createEmbedTimestamp = Nothing
+                , createEmbedDescription = ""
+                }
 
+
+foxMsg :: Text -> InteractionResponseMessage
+foxMsg foxurl = InteractionResponseMessage
+              { interactionResponseMessageTTS = Nothing
+              , interactionResponseMessageContent = Nothing
+              , interactionResponseMessageEmbeds = Just [foxEmbed foxurl]
+              , interactionResponseMessageAllowedMentions = Nothing
+              , interactionResponseMessageFlags           = Nothing
+              , interactionResponseMessageComponents      = Nothing
+              , interactionResponseMessageAttachments     = Nothing
+              }
+dogMsg :: Text -> InteractionResponseMessage
+dogMsg dogurl = InteractionResponseMessage
+              { interactionResponseMessageTTS = Nothing
+              , interactionResponseMessageContent = Nothing
+              , interactionResponseMessageEmbeds = Just [dogEmbed dogurl]
+              , interactionResponseMessageAllowedMentions = Nothing
+              , interactionResponseMessageFlags           = Nothing
+              , interactionResponseMessageComponents      = Nothing
+              , interactionResponseMessageAttachments     = Nothing
+              }
+
+dogEmbed :: Text -> CreateEmbed
+dogEmbed dogurl = CreateEmbed
+                { createEmbedAuthorName = "Barbie Dog"
+                , createEmbedAuthorUrl  = ""
+                , createEmbedAuthorIcon = Nothing
+                , createEmbedUrl        = dogurl
+                , createEmbedTitle      = ""
+                , createEmbedThumbnail  = Nothing
+                , createEmbedFields     = []
+                , createEmbedImage = Just $ CreateEmbedImageUrl dogurl
+                , createEmbedFooterText  = ""
+                , createEmbedFooterIcon = Nothing
+                , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
+                , createEmbedTimestamp = Nothing
+                , createEmbedDescription = ""
+                }
 catMsg :: Text ->  Int -> Int -> InteractionResponseMessage
 catMsg urlCat width height = InteractionResponseMessage
               { interactionResponseMessageTTS = Nothing
@@ -106,7 +170,7 @@ catEmbed caturl width height = CreateEmbed { createEmbedAuthorName = "Barbie Cat
                                                             th = T.pack $ show height
                                                         in tw `ta` " x " `ta` th
                               , createEmbedFooterIcon = Nothing
-                              , createEmbedColor = Just $ DiscordColorLuminousVividPink
+                              , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                               , createEmbedTimestamp = Nothing
                               }
 eventHandler :: Text -> Event -> DiscordHandler ()
@@ -116,6 +180,45 @@ eventHandler ctok (InteractionCreate interaction) =
       case appCommData of
         ApplicationCommandDataChatInput {applicationCommandDataName = commandname, ..} ->
           case commandname of
+            "dogimage" -> do
+                           let dogresponse = liftIO $ do
+                                                       req <- dogRequest
+                                                       resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Dog))) (\e -> do
+                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
+                                                                                              return $ Left ())
+                                                       return resp
+                           maybeR <- dogresponse
+                           case maybeR of
+                            Left () -> return ()
+                            Right dr -> do
+                                          let dog    = getResponseBody dr
+                                              dogurl = message dog
+                                              dogmsg = dogMsg dogurl
+                                          rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage dogmsg))
+                                          case rc of
+                                           Left code -> lift $ Prelude.putStrLn (show code)
+                                           Right _   -> return ()
+            "foximage" ->  do
+                            let foxresponse = liftIO $ do
+                                                        req <- foxRequest
+                                                        resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Fox))) (\e -> do
+                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
+                                                                                              return $ Left ())
+                                                        return resp
+                            maybeR <- foxresponse
+                            case maybeR of
+                             Left () -> return ()
+                             Right fr -> do
+                                          let fox    = getResponseBody fr
+                                              foxurl = image fox
+                                              foxmsg = foxMsg foxurl
+                                          rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage foxmsg))
+                                          case rc of
+                                           Left code -> lift $ Prelude.putStrLn (show code)
+                                           Right _   -> return ()
+
+
+
             "catimage" -> do
                            let catresponse = liftIO $ do
                                                        req  <- catRequest ctok
