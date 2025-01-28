@@ -26,6 +26,72 @@ import Data.Map.Strict as M
 import Data.Maybe (fromJust)
 import Data.Scientific
 import System.Random
+import Data.Either (fromRight)
+
+fromDigit :: Text -> Text
+fromDigit "1" = "01"
+fromDigit "2" = "02"
+fromDigit "3" = "03"
+fromDigit "4" = "04"
+fromDigit "5" = "05"
+fromDigit "6" = "06"
+fromDigit "7" = "07"
+fromDigit "8" = "08"
+fromDigit "9" = "09"
+fromDigit s   = s
+
+data Nasa = Nasa
+          { concepts :: Text
+          , date :: Text
+          , explanation :: Text
+          , hdurl :: Text
+          , mediaType :: Text
+          , serviceVersion :: Text
+          , title :: Text
+          , urll :: Text
+          } deriving (Show)
+
+instance FromJSON Nasa where
+    parseJSON (Object obj) = do
+      let maptext = toMapText obj
+          conc    =  case (fromJust $ M.lookup "concepts" maptext) of
+                      (String x) -> x
+                      _          -> error "concepts is not a string"
+
+          date'    =  case (fromJust $ M.lookup "date" maptext) of
+                       (String x) -> x
+                       _          -> error "date is not a string"
+          explanation' = case fromJust $ M.lookup "explanation" maptext of
+                          (String x) -> x
+                          _          -> error "explanation is not a string"
+          hdurl'   =  case fromJust $ M.lookup "hdurl" maptext of
+                       (String x) -> x
+                       _          -> error "hdurl is not a string"
+
+          mediatype = case fromJust $ M.lookup "media_type" maptext of
+                       (String x) -> x
+                       _          -> error "media_type is not a string"
+
+          serviceversion = case fromJust $ M.lookup "service_version" maptext of
+                            (String x) -> x
+                            _          -> error "service_version is not a string"
+          title'    = case fromJust $ M.lookup "title" maptext of
+                       (String x) -> x
+                       _          -> error "title is not a string"
+          url'     = case fromJust $ M.lookup "url" maptext of
+                      (String x) -> x
+                      _          -> error "url is not a string"
+
+      return $ Nasa {concepts = conc
+                    ,date = date'
+                    ,explanation = explanation'
+                    ,hdurl       = hdurl'
+                    , mediaType = mediatype
+                    , serviceVersion = serviceversion
+                    , title = title'
+                    , urll = url'
+                    }
+
 
 
 data Dog = Dog {message :: Text, status :: Text} deriving (Show, Generic)
@@ -103,6 +169,44 @@ minecraftMessageContent :: Minecraft -> Text
 minecraftMessageContent mc =
        let ta = T.append
        in "Name: " `ta` (name mc) `ta` "\nDescription: " `ta` (description mc) `ta` "\nStack size: " `ta` (T.pack $ show $ stackSize mc)
+nasaMessageContent :: Nasa -> Text
+nasaMessageContent nasa =
+        let ta = T.append
+        in  "Date: " `ta` (date nasa) `ta` "\nExplanation: " `ta` (explanation nasa)
+
+
+nasaReq :: Text -> Text -> IO Network.HTTP.Simple.Request
+nasaReq key date =
+  parseRequest $ T.unpack  $ "https://api.nasa.gov/planetary/apod?api_key=" `T.append` key `T.append` "&date=" `T.append` date `T.append` "&concept_tags=True"
+
+nasaMsg :: Nasa -> InteractionResponseMessage
+nasaMsg nasa = InteractionResponseMessage
+             { interactionResponseMessageTTS = Nothing
+             , interactionResponseMessageContent = Just $ nasaMessageContent nasa
+             , interactionResponseMessageEmbeds = Just [nasaEmbed (urll nasa)]
+             , interactionResponseMessageAllowedMentions = Nothing
+             , interactionResponseMessageFlags           = Nothing
+             , interactionResponseMessageComponents      = Nothing
+             , interactionResponseMessageAttachments     = Nothing
+             }
+nasaEmbed :: Text -> CreateEmbed
+nasaEmbed imageurl = CreateEmbed
+                { createEmbedAuthorName = "Barbie NASA"
+                , createEmbedAuthorUrl  = ""
+                , createEmbedAuthorIcon = Nothing
+                , createEmbedUrl        = imageurl
+                , createEmbedTitle      = ""
+                , createEmbedThumbnail  = Nothing
+                , createEmbedFields     = []
+                , createEmbedImage = Just $ CreateEmbedImageUrl imageurl
+                , createEmbedFooterText  = ""
+                , createEmbedFooterIcon = Nothing
+                , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
+                , createEmbedTimestamp = Nothing
+                , createEmbedDescription = ""
+                }
+
+
 
 minecraftReq :: IO Network.HTTP.Simple.Request
 minecraftReq = parseRequest $ T.unpack "https://minecraft-api.vercel.app/api/items"
@@ -240,13 +344,44 @@ catEmbed caturl width height = CreateEmbed { createEmbedAuthorName = "Barbie Cat
                               , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                               , createEmbedTimestamp = Nothing
                               }
-eventHandler :: Text -> Event -> DiscordHandler ()
-eventHandler ctok (InteractionCreate interaction) =
+eventHandler :: Text -> Text -> Event -> DiscordHandler ()
+eventHandler ctok nasatok (InteractionCreate interaction) =
   case interaction of
     InteractionApplicationCommand {interactionId = iId, interactionUser = u, interactionToken = tokId, applicationCommandData = appCommData} ->
       case appCommData of
-        ApplicationCommandDataChatInput {applicationCommandDataName = commandname, ..} ->
+        ApplicationCommandDataChatInput {applicationCommandDataName = commandname,optionsData = opt, ..} ->
           case commandname of
+            "nasa"  -> do
+                        case opt of
+                         Nothing -> return ()
+                         (Just (OptionsDataValues l)) ->
+                            case l of
+                              ([OptionDataValueString{optionDataValueString = y, optionDataValueName = n1},OptionDataValueString{optionDataValueString = m,optionDataValueName = n2},OptionDataValueString{optionDataValueString= d,optionDataValueName = n3}]) ->
+                                       do
+                                        let nr = liftIO $ do
+                                                           let year = fromRight "" y
+                                                               month = fromDigit $ fromRight "" m
+                                                               day   = fromDigit $ fromRight "" d
+                                                           req  <- nasaReq nasatok ((year) `T.append` "-" `T.append` ((month)) `T.append` "-" `T.append` ((day)))
+                                                           resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Nasa))) (\e -> do
+                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
+                                                                                                  return $ Left ())
+
+                                                           Prelude.putStrLn (show req)
+                                                           Prelude.putStrLn (show resp)
+                                                           return resp
+                                        maybeN <- nr
+                                        case maybeN of
+                                         Left () -> return ()
+                                         Right n ->
+                                               do
+                                                let nasa = getResponseBody n
+                                                nasaRC   <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $nasaMsg nasa))
+                                                return ()
+                              t                                                   -> lift $ Prelude.putStrLn $ "I was given something else for nasa"  Prelude.++ (show t)
+
+                         _                            -> return ()
+
             "craft" -> do
                                     let mcR = liftIO $ do
                                                         req <- minecraftReq
