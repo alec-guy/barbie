@@ -25,6 +25,7 @@ import Data.Aeson.KeyMap
 import Data.Map.Strict as M
 import Data.Maybe (fromJust)
 import Data.Scientific
+import System.Random
 
 
 data Dog = Dog {message :: Text, status :: Text} deriving (Show, Generic)
@@ -44,8 +45,17 @@ instance FromJSON Joke where
           (Just (String t), Just (String s), Just (String p), Just (Number i)) ->
                        return $ Joke t s p (T.pack $ show $ fromJust $ (toBoundedInteger i :: Maybe Int))
           _                                        -> return $ Joke "" "" "" ""
-data Fox = Fox {image :: Text} deriving (Show, Generic)
-instance FromJSON Fox
+
+data Fox = Fox Text deriving (Show, Generic)
+
+instance FromJSON Fox where
+   parseJSON (Object obj) = do
+    let maptext = toMapText obj
+        image'  = M.lookup "image" maptext
+    case image' of
+     (Just (String i)) ->
+        return $ Fox i
+
 
 data Cat = Cat {
          breeds :: [Text],
@@ -67,6 +77,63 @@ instance FromJSON CatArray where
                  return $ ((parseJSON obj) :: Parser Cat)
         cats <- Prelude.sequence $ V.toList $ monadVector
         return $ CatArray cats
+
+newtype MinecraftBox = MinecraftBox (Vector Minecraft) deriving (Show)
+
+instance FromJSON MinecraftBox where
+  parseJSON (Array vector) = do
+      let monadVector = do
+           obj <- vector
+           return $ ((parseJSON obj) :: Parser Minecraft)
+      minecrafts <- V.sequence monadVector
+      return $ MinecraftBox minecrafts
+
+data Minecraft = Minecraft
+               { name :: Text
+               , namespacedId :: Text
+               , description :: Text
+               , image :: Text
+               , stackSize :: Int
+               , renewable :: Bool
+               } deriving (Show, Generic)
+
+instance FromJSON Minecraft
+
+minecraftMessageContent :: Minecraft -> Text
+minecraftMessageContent mc =
+       let ta = T.append
+       in "Name: " `ta` (name mc) `ta` "\nDescription: " `ta` (description mc) `ta` "\nStack size: " `ta` (T.pack $ show $ stackSize mc)
+
+minecraftReq :: IO Network.HTTP.Simple.Request
+minecraftReq = parseRequest $ T.unpack "https://minecraft-api.vercel.app/api/items"
+
+minecraftMsg :: Minecraft -> InteractionResponseMessage
+minecraftMsg minecraft = InteractionResponseMessage
+                       { interactionResponseMessageTTS = Nothing
+                       , interactionResponseMessageContent = Just $ minecraftMessageContent minecraft
+                       , interactionResponseMessageEmbeds = Just [minecraftEmbed (image minecraft)]
+                       , interactionResponseMessageAllowedMentions = Nothing
+                       , interactionResponseMessageFlags           = Nothing
+                       , interactionResponseMessageComponents      = Nothing
+                       , interactionResponseMessageAttachments     = Nothing
+                       }
+
+minecraftEmbed :: Text -> CreateEmbed
+minecraftEmbed imageurl = CreateEmbed
+                { createEmbedAuthorName = "Barbie Minecraft"
+                , createEmbedAuthorUrl  = ""
+                , createEmbedAuthorIcon = Nothing
+                , createEmbedUrl        = imageurl
+                , createEmbedTitle      = ""
+                , createEmbedThumbnail  = Nothing
+                , createEmbedFields     = []
+                , createEmbedImage = Just $ CreateEmbedImageUrl imageurl
+                , createEmbedFooterText  = ""
+                , createEmbedFooterIcon = Nothing
+                , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
+                , createEmbedTimestamp = Nothing
+                , createEmbedDescription = ""
+                }
 
 
 foxRequest :: IO Network.HTTP.Simple.Request
@@ -180,6 +247,36 @@ eventHandler ctok (InteractionCreate interaction) =
       case appCommData of
         ApplicationCommandDataChatInput {applicationCommandDataName = commandname, ..} ->
           case commandname of
+            "craft" -> do
+                                    let mcR = liftIO $ do
+                                                        req <- minecraftReq
+                                                        resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
+                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
+                                                                                                  return $ Left ())
+                                                        return resp
+                                    maybeR <- mcR
+                                    case maybeR of
+                                     Left () -> return ()
+                                     Right mr ->
+                                           do
+                                            let box   = getResponseBody mr
+                                                ionum = lift $ do
+                                                          case box of
+                                                           (MinecraftBox box') -> do
+                                                                  gen <- getStdGen
+                                                                  let (num , _) = randomR (0, (V.length box') - 1) gen
+                                                                  return num
+                                                iomc  = do
+                                                         case box of
+                                                          (MinecraftBox box') -> do
+                                                             num <- ionum
+                                                             return (box' V.! num)
+                                            mc <- iomc
+                                            rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ minecraftMsg mc))
+                                            case rc of
+                                             Left code -> lift $ Prelude.putStrLn (show code)
+                                             Right _   -> return ()
+
             "dogimage" -> do
                            let dogresponse = liftIO $ do
                                                        req <- dogRequest
@@ -210,7 +307,8 @@ eventHandler ctok (InteractionCreate interaction) =
                              Left () -> return ()
                              Right fr -> do
                                           let fox    = getResponseBody fr
-                                              foxurl = image fox
+                                              foxurl = case fox of
+                                                        (Fox furl) -> furl
                                               foxmsg = foxMsg foxurl
                                           rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage foxmsg))
                                           case rc of
