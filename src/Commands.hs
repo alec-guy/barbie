@@ -70,3 +70,50 @@ minecraftR = CreateApplicationCommandChatInput
           , createDefaultMemberPermissions = Nothing
           , createDMPermission = Just False
           }
+
+nasaYear :: OptionValue
+nasaYear = OptionValueString
+         {optionValueName = "year"
+         ,optionValueLocalizedName = Nothing
+         ,optionValueDescription = "year as number"
+         ,optionValueLocalizedDescription = Nothing
+         ,optionValueRequired = True
+         , optionValueStringChoices = Left False
+         , optionValueStringMinLen = Nothing
+         , optionValueStringMaxLen = Just 10
+         }
+nasaMonth :: OptionValue
+nasaMonth = OptionValueString
+         {optionValueName = "month"
+         ,optionValueLocalizedName = Nothing
+         ,optionValueDescription = "month as number"
+         ,optionValueLocalizedDescription = Nothing
+         ,optionValueRequired = True
+         , optionValueStringChoices = Left False
+         , optionValueStringMinLen = Nothing
+         , optionValueStringMaxLen = Just 10
+         }
+nasaDay :: OptionValue
+nasaDay = OptionValueString
+         {optionValueName = "day"
+         ,optionValueLocalizedName = Nothing
+         ,optionValueDescription = "day as number"
+         ,optionValueLocalizedDescription = Nothing
+         ,optionValueRequired = True
+         , optionValueStringChoices = Left False
+         , optionValueStringMinLen = Nothing
+         , optionValueStringMaxLen = Just 10
+         }
+
+
+nasa :: CreateApplicationCommand
+nasa = CreateApplicationCommandChatInput
+          { createName = "nasa"
+          , createDescription = "nasa picture of the day"
+          , createLocalizedName = Nothing
+          , createLocalizedDescription = Nothing
+          , createOptions = Just $ OptionsValues [nasaYear, nasaMonth, nasaDay]
+          , createDefaultMemberPermissions = Nothing
+          , createDMPermission = Just False
+          }
+
