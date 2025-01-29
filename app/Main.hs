@@ -20,5 +20,5 @@ main :: IO ()
 main = do
    cattoken <- getCatToken
    bottoken <- getDiscordToken
-   result   <- runDiscord (myDiscordOpts bottoken cattoken [catimage,joke, dogimage,foximage,minecraftR, heart])
+   result   <- runDiscord (myDiscordOpts bottoken cattoken nasatok [catimage,joke, dogimage,foximage,minecraftR, heart,nasa,craftInfo])
    Data.Text.IO.putStrLn result
