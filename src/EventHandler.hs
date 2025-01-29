@@ -163,6 +163,9 @@ data Minecraft = Minecraft
                , renewable :: Bool
                } deriving (Show, Generic)
 
+hasMinecraftName :: Text -> Minecraft -> Bool
+hasMinecraftName n mc = (name mc) == n
+
 instance FromJSON Minecraft
 
 minecraftMessageContent :: Minecraft -> Text
@@ -364,11 +367,11 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                                                day   = fromDigit $ fromRight "" d
                                                            req  <- nasaReq nasatok ((year) `T.append` "-" `T.append` ((month)) `T.append` "-" `T.append` ((day)))
                                                            resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Nasa))) (\e -> do
-                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
-                                                                                                  return $ Left ())
 
-                                                           Prelude.putStrLn (show req)
-                                                           Prelude.putStrLn (show resp)
+                      Prelude.putStrLn $ (show (e ::  SomeException))
+
+                      return $ Left ())
+
                                                            return resp
                                         maybeN <- nr
                                         case maybeN of
@@ -378,7 +381,8 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                                 let nasa = getResponseBody n
                                                 nasaRC   <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $nasaMsg nasa))
                                                 return ()
-                              t                                                   -> lift $ Prelude.putStrLn $ "I was given something else for nasa"  Prelude.++ (show t)
+                              t
+      -> lift $ Prelude.putStrLn $ "I was given something else for nasa"  Prelude.++ (show t)
 
                          _                            -> return ()
 
@@ -386,8 +390,10 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                     let mcR = liftIO $ do
                                                         req <- minecraftReq
                                                         resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
-                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
-                                                                                                  return $ Left ())
+
+                      Prelude.putStrLn $ (show (e ::  SomeException))
+
+                      return $ Left ())
                                                         return resp
                                     maybeR <- mcR
                                     case maybeR of
@@ -401,6 +407,7 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                                                   gen <- getStdGen
                                                                   let (num , _) = randomR (0, (V.length box') - 1) gen
                                                                   return num
+
                                                 iomc  = do
                                                          case box of
                                                           (MinecraftBox box') -> do
@@ -411,13 +418,46 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                             case rc of
                                              Left code -> lift $ Prelude.putStrLn (show code)
                                              Right _   -> return ()
+            "craftinfo" -> do
+                              let mcR = liftIO $ do
+                                                  req <- minecraftReq
+                                                  resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
+
+                      Prelude.putStrLn $ (show (e ::  SomeException))
+
+                      return $ Left ())
+                                                  return resp
+                              maybeR <- mcR
+                              case maybeR of
+                               Left () -> return ()
+                               Right mr -> do
+                                    let box = case (getResponseBody mr) of
+                                               (MinecraftBox box') -> box'
+                                    case opt of
+                                     Nothing -> return ()
+                                     (Just (OptionsDataValues l)) ->
+                                       case l of
+                                        [OptionDataValueString{optionDataValueString = eitemName, optionDataValueName = n1}] -> do
+                                          let  itemName = fromRight "" eitemName
+                                               maybeItem = V.find (hasMinecraftName itemName) box
+                                          case maybeItem of
+                                           Nothing -> do
+                                                       rc <- restCall(CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ interactionResponseMessageBasic "Sorry, I could not find that item :p"))
+                                                       return ()
+                                           (Just mine) -> do
+                                                           rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ minecraftMsg mine))
+                                                           return ()
+
+
 
             "dogimage" -> do
                            let dogresponse = liftIO $ do
                                                        req <- dogRequest
                                                        resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Dog))) (\e -> do
-                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
-                                                                                              return $ Left ())
+
+                  Prelude.putStrLn $ (show (e :: SomeException))
+
+                  return $ Left ())
                                                        return resp
                            maybeR <- dogresponse
                            case maybeR of
@@ -434,8 +474,10 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                             let foxresponse = liftIO $ do
                                                         req <- foxRequest
                                                         resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Fox))) (\e -> do
-                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
-                                                                                              return $ Left ())
+
+                  Prelude.putStrLn $ (show (e :: SomeException))
+
+                  return $ Left ())
                                                         return resp
                             maybeR <- foxresponse
                             case maybeR of
@@ -456,8 +498,10 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                            let catresponse = liftIO $ do
                                                        req  <- catRequest ctok
                                                        resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response CatArray))) (\e -> do
-                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
-                                                                                              return $ Left ())
+
+                  Prelude.putStrLn $ (show (e :: SomeException))
+
+                  return $ Left ())
                                                        return resp
                            maybeR <- catresponse
                            case maybeR of
@@ -482,8 +526,10 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                           let jokeresponse = liftIO $ do
                                                        req <- jokeRequest
                                                        resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response Joke))) (\e -> do
-                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
-                                                                                              return $ Left ())
+
+                  Prelude.putStrLn $ (show (e :: SomeException))
+
+                  return $ Left ())
                                                        return resp
                           maybeR <- jokeresponse
                           case maybeR of
