@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Commands where
 
 import Discord
@@ -82,6 +80,7 @@ nasaYear = OptionValueString
          , optionValueStringMinLen = Nothing
          , optionValueStringMaxLen = Just 10
          }
+---------------------------------------------
 nasaMonth :: OptionValue
 nasaMonth = OptionValueString
          {optionValueName = "month"
@@ -117,3 +116,26 @@ nasa = CreateApplicationCommandChatInput
           , createDMPermission = Just False
           }
 
+------------------------------------------------
+item :: OptionValue
+item = OptionValueString
+     {optionValueName = "name"
+     , optionValueLocalizedName = Nothing
+     , optionValueDescription = "item to search"
+     , optionValueLocalizedDescription = Nothing
+     , optionValueRequired = True
+     , optionValueStringChoices = Left False
+     , optionValueStringMinLen = Nothing
+     , optionValueStringMaxLen = Just 25
+     }
+
+craftInfo :: CreateApplicationCommand
+craftInfo = CreateApplicationCommandChatInput
+          { createName = "craftinfo"
+          , createDescription = "find info of minecraft item"
+          , createLocalizedName = Nothing
+          , createLocalizedDescription = Nothing
+          , createOptions = Just $ OptionsValues [item]
+          , createDefaultMemberPermissions = Nothing
+          , createDMPermission = Just False
+          }
