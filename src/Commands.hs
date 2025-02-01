@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Commands where
 
 import Discord
@@ -7,9 +9,21 @@ import Discord.Internal.Rest.Interactions
 import Discord.Internal.Rest.ApplicationCommands
 import Discord.Internal.Types.ApplicationCommands
 
+
+help :: CreateApplicationCommand
+help = CreateApplicationCommandChatInput
+     {createName = "help"
+     , createDescription = "display help information"
+     , createLocalizedName = Nothing
+     , createLocalizedDescription = Nothing
+     , createOptions = Nothing
+     , createDefaultMemberPermissions = Nothing
+     , createDMPermission = Just False
+     }
+
 catimage :: CreateApplicationCommand
 catimage = CreateApplicationCommandChatInput
-         { createName = "catimage"
+         { createName = "cat"
          , createDescription = "random cat image"
          , createLocalizedName = Nothing
          , createLocalizedDescription = Nothing
@@ -21,7 +35,7 @@ catimage = CreateApplicationCommandChatInput
 heart :: CreateApplicationCommand
 heart = CreateApplicationCommandChatInput
       {createName = "heart"
-      , createDescription = "an emoji"
+      , createDescription = "a random heart emoji"
       , createLocalizedName = Nothing
       , createLocalizedDescription = Nothing
       , createOptions = Nothing
@@ -40,7 +54,7 @@ joke = CreateApplicationCommandChatInput
       }
 dogimage :: CreateApplicationCommand
 dogimage = CreateApplicationCommandChatInput
-         { createName = "dogimage"
+         { createName = "dog"
          , createDescription = "random dog image"
          , createLocalizedName = Nothing
          , createLocalizedDescription = Nothing
@@ -50,7 +64,7 @@ dogimage = CreateApplicationCommandChatInput
          }
 foximage :: CreateApplicationCommand
 foximage = CreateApplicationCommandChatInput
-         { createName = "foximage"
+         { createName = "fox"
          , createDescription = "random fox image"
          , createLocalizedName = Nothing
          , createLocalizedDescription = Nothing
@@ -139,3 +153,26 @@ craftInfo = CreateApplicationCommandChatInput
           , createDefaultMemberPermissions = Nothing
           , createDMPermission = Just False
           }
+
+
+pokemonName :: OptionValue
+pokemonName = OptionValueString
+            {optionValueName = "name"
+            , optionValueLocalizedName = Nothing
+            , optionValueDescription = "pokemon to search for"
+            , optionValueLocalizedDescription = Nothing
+            , optionValueRequired = True
+            , optionValueStringChoices = Left False
+            , optionValueStringMinLen = Nothing
+            , optionValueStringMaxLen = Just 25
+            }
+pokemon :: CreateApplicationCommand
+pokemon = CreateApplicationCommandChatInput
+        { createName = "pokedex"
+        , createDescription = "find info of pokemon"
+        , createLocalizedName = Nothing
+        , createLocalizedDescription = Nothing
+        , createOptions = Just $ OptionsValues [pokemonName]
+        , createDefaultMemberPermissions = Nothing
+        , createDMPermission = Just False
+        }
