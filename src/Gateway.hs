@@ -5,15 +5,15 @@ import Discord.Internal.Types.Gateway
 
 gateway =
     GatewayIntent
-    { gatewayIntentGuilds = False
-    , gatewayIntentMembers = False
+    { gatewayIntentGuilds = True
+    , gatewayIntentMembers = True
     , gatewayIntentBans    = False
     , gatewayIntentEmojis = False
     , gatewayIntentIntegrations = False
     , gatewayIntentWebhooks = False
     , gatewayIntentInvites = False
     , gatewayIntentVoiceStates = False
-    , gatewayIntentPresences = False
+    , gatewayIntentPresences = True
     , gatewayIntentMessageChanges = False
     , gatewayIntentMessageReactions = False
     , gatewayIntentMessageTyping    = False
@@ -21,6 +21,6 @@ gateway =
     , gatewayIntentDirectMessageReactions = False
     , gatewayIntentDirectMessageTyping = False
     , gatewayIntentMessageContent = True
-    , gatewayIntentAutoModerationConfiguration = False
-    , gatewayIntentAutoModerationExecution = False
+    --, gatewayIntentAutoModerationConfiguration = False
+    --, gatewayIntentAutoModerationExecution = False
     }
