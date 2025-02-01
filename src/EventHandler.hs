@@ -6,6 +6,7 @@ module EventHandler where
 import Data.Text as T
 import Data.Text.IO as TIO
 import Discord
+
 import Discord.Internal.Rest.Channel
 import Discord.Internal.Types.Events
 import Discord.Internal.Types.Interactions
@@ -14,8 +15,12 @@ import Discord.Internal.Rest.ApplicationCommands
 import Discord.Internal.Types.ApplicationCommands
 import Discord.Internal.Types.Embed
 import Discord.Internal.Types.Color
+import Discord.Internal.Rest.Guild
+import Discord.Internal.Types.Guild
+
 import Control.Monad.Reader
 import Network.HTTP.Simple
+-- import Network.HTTP.Types.Header
 import Data.Aeson
 import Data.Aeson.Types
 import GHC.Generics
@@ -26,9 +31,20 @@ import Data.Map.Strict as M
 import Data.Maybe (fromJust)
 import Data.Scientific
 import System.Random
-import Data.Either (fromRight)
+import Data.Either (fromRight, isLeft)
+
+import MinecraftTypes
+import Control.Monad (void)
+
+import Heart
+import Data.ByteString as BS
+
+import Pokemon
+
+
 
 fromDigit :: Text -> Text
+fromDigit "0" = "00"
 fromDigit "1" = "01"
 fromDigit "2" = "02"
 fromDigit "3" = "03"
@@ -144,43 +160,25 @@ instance FromJSON CatArray where
         cats <- Prelude.sequence $ V.toList $ monadVector
         return $ CatArray cats
 
-newtype MinecraftBox = MinecraftBox (Vector Minecraft) deriving (Show)
-
-instance FromJSON MinecraftBox where
-  parseJSON (Array vector) = do
-      let monadVector = do
-           obj <- vector
-           return $ ((parseJSON obj) :: Parser Minecraft)
-      minecrafts <- V.sequence monadVector
-      return $ MinecraftBox minecrafts
-
-data Minecraft = Minecraft
-               { name :: Text
-               , namespacedId :: Text
-               , description :: Text
-               , image :: Text
-               , stackSize :: Int
-               , renewable :: Bool
-               } deriving (Show, Generic)
 
 hasMinecraftName :: Text -> Minecraft -> Bool
-hasMinecraftName n mc = (name mc) == n
+hasMinecraftName n mc = (MinecraftTypes.name mc) == n
 
-instance FromJSON Minecraft
+minecraftBoxEmpty :: MinecraftBox -> Bool
+minecraftBoxEmpty (MinecraftBox box) = V.null box
 
 minecraftMessageContent :: Minecraft -> Text
 minecraftMessageContent mc =
-       let ta = T.append
-       in "Name: " `ta` (name mc) `ta` "\nDescription: " `ta` (description mc) `ta` "\nStack size: " `ta` (T.pack $ show $ stackSize mc)
+    "Name: " <> (MinecraftTypes.name mc) <> "\nDescription: " <> (description mc) <> "\nStack size: " <> (T.pack $ show $ stackSize mc)
+
 nasaMessageContent :: Nasa -> Text
 nasaMessageContent nasa =
-        let ta = T.append
-        in  "Date: " `ta` (date nasa) `ta` "\nExplanation: " `ta` (explanation nasa)
+        "Date: " <> (date nasa) <> "\nExplanation: " <> (explanation nasa)
 
 
 nasaReq :: Text -> Text -> IO Network.HTTP.Simple.Request
 nasaReq key date =
-  parseRequest $ T.unpack  $ "https://api.nasa.gov/planetary/apod?api_key=" `T.append` key `T.append` "&date=" `T.append` date `T.append` "&concept_tags=True"
+  parseRequest $ T.unpack  $ "https://api.nasa.gov/planetary/apod?api_key=" <> key <> "&date=" <> date <> "&concept_tags=True"
 
 nasaMsg :: Nasa -> InteractionResponseMessage
 nasaMsg nasa = InteractionResponseMessage
@@ -202,17 +200,12 @@ nasaEmbed imageurl = CreateEmbed
                 , createEmbedThumbnail  = Nothing
                 , createEmbedFields     = []
                 , createEmbedImage = Just $ CreateEmbedImageUrl imageurl
-                , createEmbedFooterText  = ""
+                , createEmbedFooterText  = "Dream big, reach for the stars 🚀"
                 , createEmbedFooterIcon = Nothing
                 , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                 , createEmbedTimestamp = Nothing
                 , createEmbedDescription = ""
                 }
-
-
-
-minecraftReq :: IO Network.HTTP.Simple.Request
-minecraftReq = parseRequest $ T.unpack "https://minecraft-api.vercel.app/api/items"
 
 minecraftMsg :: Minecraft -> InteractionResponseMessage
 minecraftMsg minecraft = InteractionResponseMessage
@@ -235,13 +228,17 @@ minecraftEmbed imageurl = CreateEmbed
                 , createEmbedThumbnail  = Nothing
                 , createEmbedFields     = []
                 , createEmbedImage = Just $ CreateEmbedImageUrl imageurl
-                , createEmbedFooterText  = ""
+                , createEmbedFooterText  = "Even Barbie mines diamonds 💎"
                 , createEmbedFooterIcon = Nothing
                 , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                 , createEmbedTimestamp = Nothing
                 , createEmbedDescription = ""
                 }
 
+
+
+pokemonRequest :: Text -> IO Network.HTTP.Simple.Request
+pokemonRequest pokemonName = parseRequest $ T.unpack $ "https://pokeapi.co/api/v2/pokemon/" <> pokemonName
 
 foxRequest :: IO Network.HTTP.Simple.Request
 foxRequest = parseRequest $ T.unpack "https://randomfox.ca/floof"
@@ -253,15 +250,56 @@ jokeRequest :: IO Network.HTTP.Simple.Request
 jokeRequest = parseRequest $ T.unpack "https://official-joke-api.appspot.com/random_joke"
 
 catRequest :: Text -> IO Network.HTTP.Simple.Request
-catRequest ctok = parseRequest $ T.unpack ("https://api.thecatapi.com/v1/images/search?limit=1&api_key=" `T.append` ctok)
+catRequest ctok = parseRequest $ T.unpack ("https://api.thecatapi.com/v1/images/search?limit=1&api_key=" <> ctok)
 
 jokeMsg :: Text -> Text -> Text -> InteractionResponseMessage
 jokeMsg typ setup punch =
-    let joke = setup `T.append` "\n" `T.append` punch
+    let joke = setup <> "\n" <> punch
     in  interactionResponseMessageBasic joke
 
-heartMessage :: InteractionResponseMessage
-heartMessage = interactionResponseMessageBasic "❤️"
+
+pokeMsg :: Pokemon -> InteractionResponseMessage
+pokeMsg pokemon= InteractionResponseMessage
+              { interactionResponseMessageTTS = Nothing
+              , interactionResponseMessageContent = Nothing
+              , interactionResponseMessageEmbeds = Just [pokeEmbed pokemon]
+              , interactionResponseMessageAllowedMentions = Nothing
+              , interactionResponseMessageFlags           = Nothing
+              , interactionResponseMessageComponents      = Nothing
+              , interactionResponseMessageAttachments     = Nothing
+              }
+
+
+
+
+pokeEmbed :: Pokemon -> CreateEmbed
+pokeEmbed pokemon = CreateEmbed
+                  { createEmbedAuthorName = "Barbie Pokedex"
+                  , createEmbedAuthorUrl  = ""
+                  , createEmbedAuthorIcon = Nothing
+                  , createEmbedUrl        =  frontDefault (sprites pokemon)
+                  , createEmbedTitle      = ""
+                  , createEmbedThumbnail  = Nothing
+                  , createEmbedFields     = []
+                  , createEmbedImage = Just $ CreateEmbedImageUrl (frontDefault $ sprites pokemon)
+                  , createEmbedFooterText  = "Barbie " <> (if (Pokemon.name pokemon) == "jigglypuff" then "jigglypuff,Barbie's fav" else (Pokemon.name pokemon))
+                  , createEmbedFooterIcon = Nothing
+                  , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
+                  , createEmbedTimestamp = Nothing
+                  , createEmbedDescription =
+                            let w = (((if (weight pokemon) == Nothing then 0 else fromJust (weight pokemon)) * 100) `div` 1000)
+                            in "Information\n" <> "Name: " <> (Pokemon.name pokemon) <>
+                                  "\nSpecies: " <> (speciesName $ species pokemon) <>
+                                     "\nType: " <> (showTypes $ typePokemon pokemon) <>
+                                       "\nWeight: " <>
+                                         (T.pack $ show w) <> "kg or " <>
+                                          ( T.pack $ show $ (round $ (fromIntegral w) * 2.2)) <> " lbs" <>
+                                            "\nHeight: " <>  (T.pack $ show $ Pokemon.height pokemon)
+                  }
+
+
+heartMessage :: Text -> InteractionResponseMessage
+heartMessage heart = interactionResponseMessageBasic heart
 
 foxEmbed :: Text -> CreateEmbed
 foxEmbed foxurl = CreateEmbed
@@ -273,13 +311,20 @@ foxEmbed foxurl = CreateEmbed
                 , createEmbedThumbnail  = Nothing
                 , createEmbedFields     = []
                 , createEmbedImage = Just $ CreateEmbedImageUrl foxurl
-                , createEmbedFooterText  = ""
+                , createEmbedFooterText  = "Glitter, glam, and one foxy friend 🦊✨"
                 , createEmbedFooterIcon = Nothing
                 , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                 , createEmbedTimestamp = Nothing
                 , createEmbedDescription = ""
                 }
 
+{-
+serverCount :: Maybe Integer -> InteractionResponseMessage
+serverCount maybeI =
+   case maybeI of
+    Nothing -> interactionResponseMessageBasic "I cannot find any members as of the moment."
+    (Just i) -> interactionResponseMessageBasic $ T.pack $ "Approximation: " Prelude.++ (show i) Prelude.++ " members."
+-}
 
 foxMsg :: Text -> InteractionResponseMessage
 foxMsg foxurl = InteractionResponseMessage
@@ -291,6 +336,47 @@ foxMsg foxurl = InteractionResponseMessage
               , interactionResponseMessageComponents      = Nothing
               , interactionResponseMessageAttachments     = Nothing
               }
+
+helpM :: InteractionResponseMessage
+helpM = InteractionResponseMessage
+      { interactionResponseMessageTTS = Nothing
+      , interactionResponseMessageContent = Nothing
+      , interactionResponseMessageEmbeds = Just [helpEmbed]
+      , interactionResponseMessageAllowedMentions = Nothing
+      , interactionResponseMessageFlags           = Nothing
+      , interactionResponseMessageComponents      = Nothing
+      , interactionResponseMessageAttachments     = Nothing
+      }
+helpEmbed :: CreateEmbed
+helpEmbed = CreateEmbed
+          { createEmbedAuthorName = "Barbie Help"
+          , createEmbedAuthorUrl  = ""
+          , createEmbedAuthorIcon = Nothing
+          , createEmbedUrl        = ""
+          , createEmbedTitle      = "Help Screen"
+          , createEmbedThumbnail  = Nothing
+          , createEmbedFields     = []
+          , createEmbedImage = Nothing
+          , createEmbedFooterText  = "Barbie lending a helping hand"
+          , createEmbedFooterIcon = Nothing
+          , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
+          , createEmbedTimestamp = Nothing
+          , createEmbedDescription = helpMsg
+          }
+helpMsg :: Text
+helpMsg = "  / <- for commands \n\
+           \ cat for a random cat image🐱\n\
+           \ dog for a random dog image🐶\n\
+           \ nasa for the nasa picture of the day 🚀\n\
+           \ fox for a random fox image 🦊✨\n\
+           \ craft for a random minecraft item 💎\n\
+           \ craftinfo to search for a minecraft item⛏️\n\
+           \ joke for a random joke 😅\n\
+           \ heart for a random heart emoji🩷\n\
+           \ pokedex [name] for a pokemon\n\
+           \ help for this help screen✏️"
+
+
 dogMsg :: Text -> InteractionResponseMessage
 dogMsg dogurl = InteractionResponseMessage
               { interactionResponseMessageTTS = Nothing
@@ -312,7 +398,7 @@ dogEmbed dogurl = CreateEmbed
                 , createEmbedThumbnail  = Nothing
                 , createEmbedFields     = []
                 , createEmbedImage = Just $ CreateEmbedImageUrl dogurl
-                , createEmbedFooterText  = ""
+                , createEmbedFooterText  = "Fetching the cutest pups just for you 🎀"
                 , createEmbedFooterIcon = Nothing
                 , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                 , createEmbedTimestamp = Nothing
@@ -320,17 +406,18 @@ dogEmbed dogurl = CreateEmbed
                 }
 catMsg :: Text ->  Int -> Int -> InteractionResponseMessage
 catMsg urlCat width height = InteractionResponseMessage
-              { interactionResponseMessageTTS = Nothing
-              , interactionResponseMessageContent = Nothing
-              , interactionResponseMessageEmbeds = Just [catEmbed urlCat width height]
-              , interactionResponseMessageAllowedMentions = Nothing
-              , interactionResponseMessageFlags = Nothing
-              , interactionResponseMessageComponents = Nothing
-              , interactionResponseMessageAttachments = Nothing
-              }
+                           { interactionResponseMessageTTS = Nothing
+                           , interactionResponseMessageContent = Nothing
+                           , interactionResponseMessageEmbeds = Just [catEmbed urlCat width height]
+                           , interactionResponseMessageAllowedMentions = Nothing
+                           , interactionResponseMessageFlags = Nothing
+                           , interactionResponseMessageComponents = Nothing
+                           , interactionResponseMessageAttachments = Nothing
+                           }
 
 catEmbed :: Text -> Int -> Int -> CreateEmbed
-catEmbed caturl width height = CreateEmbed { createEmbedAuthorName = "Barbie Cat"
+catEmbed caturl width height = CreateEmbed
+                              { createEmbedAuthorName = "Barbie Cat"
                               , createEmbedAuthorUrl = ""
                               , createEmbedAuthorIcon = Nothing
                               , createEmbedTitle = ""
@@ -339,21 +426,62 @@ catEmbed caturl width height = CreateEmbed { createEmbedAuthorName = "Barbie Cat
                               , createEmbedDescription= ""
                               , createEmbedFields = []
                               , createEmbedImage = Just $ CreateEmbedImageUrl caturl
-                              , createEmbedFooterText = let ta = T.append
-                                                            tw = T.pack $ show width
+                              , createEmbedFooterText = let tw = T.pack $ show width
                                                             th = T.pack $ show height
-                                                        in tw `ta` " x " `ta` th
+                                                        in  tw <> " x " <> th <> "\n🐈Feline fabulous, just like me"
                               , createEmbedFooterIcon = Nothing
                               , createEmbedColor = Just $ (DiscordColorRGB 224 33 138)
                               , createEmbedTimestamp = Nothing
                               }
-eventHandler :: Text -> Text -> Event -> DiscordHandler ()
-eventHandler ctok nasatok (InteractionCreate interaction) =
+eventHandler :: Text -> Text -> MinecraftBox  -> Event -> DiscordHandler ()
+eventHandler ctok nasatok box (InteractionCreate interaction) =
   case interaction of
-    InteractionApplicationCommand {interactionId = iId, interactionUser = u, interactionToken = tokId, applicationCommandData = appCommData} ->
+    InteractionApplicationCommand {interactionId = iId, interactionUser = u, interactionToken = tokId, applicationCommandData = appCommData, interactionGuildId = iGD} ->
       case appCommData of
         ApplicationCommandDataChatInput {applicationCommandDataName = commandname,optionsData = opt, ..} ->
           case commandname of
+            {-
+            "users" -> do
+                        case iGD of
+                         Nothing      -> lift $ TIO.putStrLn "Could not find guild id"
+                         Just guildid -> do
+                            rc <- restCall (GetGuild guildid)
+                            case rc of
+                             Left err    -> lift $ TIO.putStrLn (T.pack $ show err)
+                             Right guild -> do
+                               rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ serverCount $ guildApproxPresenceCount guild))
+                               case rc of
+                                Left err' -> lift $ TIO.putStrLn (T.pack $ show err')
+                                Right _   -> return ()
+            -}
+
+            "pokedex" -> do
+                     case opt of
+                      Nothing -> return ()
+                      (Just (OptionsDataValues l)) ->
+                         case l of
+                          ([OptionDataValueString{optionDataValueString = name}]) -> do
+                             let pr = liftIO $ do
+                                   case name of
+                                    Left _ -> return $ Left ()
+                                    Right n ->  do
+                                      req <- pokemonRequest n
+                                      resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response Pokemon))) (\e -> do
+                                                                                         Prelude.putStrLn (show (e :: SomeException))
+                                                                                         return $ Left ())
+                                      -- Prelude.putStrLn $ show resp
+                                      return resp
+                             maybeP <- pr
+                             case maybeP of
+                              Left () -> void $ restCall ((CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ interactionResponseMessageBasic "server error - barbie")))
+                              Right presp ->
+                                 do
+                                  let pokemon = getResponseBody presp
+                                  void $ restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ pokeMsg pokemon))
+
+
+            "help"  -> do
+                        void $ restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage helpM))
             "nasa"  -> do
                         case opt of
                          Nothing -> return ()
@@ -365,12 +493,11 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                                            let year = fromRight "" y
                                                                month = fromDigit $ fromRight "" m
                                                                day   = fromDigit $ fromRight "" d
-                                                           req  <- nasaReq nasatok ((year) `T.append` "-" `T.append` ((month)) `T.append` "-" `T.append` ((day)))
+                                                           req  <- nasaReq nasatok ((year) <> "-" <> ((month)) <> "-" <> ((day)))
                                                            resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Nasa))) (\e -> do
+                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
+                                                                                                  return $ Left ())
 
-                      Prelude.putStrLn $ (show (e ::  SomeException))
-
-                      return $ Left ())
 
                                                            return resp
                                         maybeN <- nr
@@ -381,68 +508,76 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                                 let nasa = getResponseBody n
                                                 nasaRC   <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $nasaMsg nasa))
                                                 return ()
-                              t
-      -> lift $ Prelude.putStrLn $ "I was given something else for nasa"  Prelude.++ (show t)
+                              t                                                   -> lift $ Prelude.putStrLn $ "I was given something else for nasa"  Prelude.++ (show t)
 
                          _                            -> return ()
 
-            "craft" -> do
-                                    let mcR = liftIO $ do
-                                                        req <- minecraftReq
-                                                        resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
+            "craft" ->  if minecraftBoxEmpty box
+                        then do
+                          let mcR = liftIO $ do
+                                       req <- minecraftReq
+                                       resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
+                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
+                                                                                                  return $ Left ())
+                                       TIO.putStrLn "Made api request because of empty vector"
+                                       return resp
+                          maybeR <- mcR
+                          case maybeR of
+                            Left () -> do
+                                        void (restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ interactionResponseMessageBasic "trouble connecting to minecraft api")))
+                                        eventHandler ctok nasatok (MinecraftBox V.empty) (InteractionCreate interaction)
 
-                      Prelude.putStrLn $ (show (e ::  SomeException))
+                            Right mr -> do
+                                         let box   = getResponseBody mr
+                                         eventHandler ctok nasatok box (InteractionCreate interaction)
+                        else do
+                              let ionum  = lift $ do
+                                                 case box of
+                                                  (MinecraftBox box') -> do
+                                                     gen <- getStdGen
+                                                     let (num , _) = randomR (0, (V.length box') - 1) gen
+                                                     return num
+                                  iomc  = do
+                                    case box of
+                                     (MinecraftBox box') -> do
+                                              num <- ionum
+                                              return (box' V.! num)
+                              mc <- iomc
+                              rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ minecraftMsg mc))
+                              case rc of
+                               Left code -> lift $ Prelude.putStrLn (show code)
+                               Right _   -> return ()
 
-                      return $ Left ())
-                                                        return resp
-                                    maybeR <- mcR
-                                    case maybeR of
-                                     Left () -> return ()
-                                     Right mr ->
-                                           do
-                                            let box   = getResponseBody mr
-                                                ionum = lift $ do
-                                                          case box of
-                                                           (MinecraftBox box') -> do
-                                                                  gen <- getStdGen
-                                                                  let (num , _) = randomR (0, (V.length box') - 1) gen
-                                                                  return num
+            "craftinfo" -> if minecraftBoxEmpty box
+                           then  do
+                             let mcR = liftIO $ do
+                                    req <- minecraftReq
+                                    resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
+                                                                                                  Prelude.putStrLn $ (show (e ::  SomeException))
+                                                                                                  return $ Left ())
+                                    return resp
+                             maybeR <- mcR
+                             case maybeR of
+                                Left () -> do
+                                            void (restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ interactionResponseMessageBasic "trouble connecting to minecraft api")))
+                                            eventHandler ctok nasatok (MinecraftBox V.empty) (InteractionCreate interaction)
+                                Right mr -> do
+                                             let box   = getResponseBody mr
+                                             eventHandler ctok nasatok box  (InteractionCreate interaction)
 
-                                                iomc  = do
-                                                         case box of
-                                                          (MinecraftBox box') -> do
-                                                             num <- ionum
-                                                             return (box' V.! num)
-                                            mc <- iomc
-                                            rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ minecraftMsg mc))
-                                            case rc of
-                                             Left code -> lift $ Prelude.putStrLn (show code)
-                                             Right _   -> return ()
-            "craftinfo" -> do
-                              let mcR = liftIO $ do
-                                                  req <- minecraftReq
-                                                  resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response MinecraftBox))) (\e -> do
-
-                      Prelude.putStrLn $ (show (e ::  SomeException))
-
-                      return $ Left ())
-                                                  return resp
-                              maybeR <- mcR
-                              case maybeR of
-                               Left () -> return ()
-                               Right mr -> do
-                                    let box = case (getResponseBody mr) of
-                                               (MinecraftBox box') -> box'
+                           else do
+                                 case box of
+                                  (MinecraftBox box1) ->
                                     case opt of
                                      Nothing -> return ()
                                      (Just (OptionsDataValues l)) ->
                                        case l of
                                         [OptionDataValueString{optionDataValueString = eitemName, optionDataValueName = n1}] -> do
-                                          let  itemName = fromRight "" eitemName
-                                               maybeItem = V.find (hasMinecraftName itemName) box
+                                          let  itemName = T.toTitle (fromRight "" eitemName)
+                                               maybeItem = V.find (hasMinecraftName itemName) box1
                                           case maybeItem of
                                            Nothing -> do
-                                                       rc <- restCall(CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ interactionResponseMessageBasic "Sorry, I could not find that item :p"))
+                                                       rc <- restCall(CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ interactionResponseMessageBasic ("Sorry, I could not find that item (" <> ( " " <> itemName <> ")"))))
                                                        return ()
                                            (Just mine) -> do
                                                            rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage $ minecraftMsg mine))
@@ -450,14 +585,12 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
 
 
 
-            "dogimage" -> do
+            "dog" -> do
                            let dogresponse = liftIO $ do
                                                        req <- dogRequest
                                                        resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Dog))) (\e -> do
-
-                  Prelude.putStrLn $ (show (e :: SomeException))
-
-                  return $ Left ())
+                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
+                                                                                              return $ Left ())
                                                        return resp
                            maybeR <- dogresponse
                            case maybeR of
@@ -470,14 +603,12 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                           case rc of
                                            Left code -> lift $ Prelude.putStrLn (show code)
                                            Right _   -> return ()
-            "foximage" ->  do
+            "fox" ->  do
                             let foxresponse = liftIO $ do
                                                         req <- foxRequest
                                                         resp <-  catch ((Right <$> httpJSON req) :: IO (Either () (Response Fox))) (\e -> do
-
-                  Prelude.putStrLn $ (show (e :: SomeException))
-
-                  return $ Left ())
+                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
+                                                                                              return $ Left ())
                                                         return resp
                             maybeR <- foxresponse
                             case maybeR of
@@ -494,14 +625,12 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
 
 
 
-            "catimage" -> do
+            "cat" -> do
                            let catresponse = liftIO $ do
                                                        req  <- catRequest ctok
                                                        resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response CatArray))) (\e -> do
-
-                  Prelude.putStrLn $ (show (e :: SomeException))
-
-                  return $ Left ())
+                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
+                                                                                              return $ Left ())
                                                        return resp
                            maybeR <- catresponse
                            case maybeR of
@@ -511,14 +640,16 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                           case catarray of
                                            CatArray cats -> do
                                              let cat= Prelude.head cats
-                                             rc <- let ctmsg = catMsg (url cat) (width cat) (height cat)
+                                             rc <- let ctmsg = catMsg (url cat) (width cat) (EventHandler.height cat)
                                                    in restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage ctmsg ))
                                              case rc of
                                               Left code -> lift $ Prelude.putStrLn (show code)
 
                                               Right _   -> return ()
             "heart"   -> do
-                          rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage heartMessage))
+                          gen <- lift getStdGen
+                          let (num , _) = randomR (0, ((V.length heartVector) - 1)) gen
+                          rc <- restCall (CreateInteractionResponse iId tokId (InteractionResponseChannelMessage (heartMessage (heartVector V.! num))))
                           case rc of
                            Left code' -> lift $ Prelude.putStrLn (show code')
                            Right _    -> return ()
@@ -526,10 +657,8 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                           let jokeresponse = liftIO $ do
                                                        req <- jokeRequest
                                                        resp <- catch ((Right <$> httpJSON req) :: IO (Either () (Response Joke))) (\e -> do
-
-                  Prelude.putStrLn $ (show (e :: SomeException))
-
-                  return $ Left ())
+                                                                                              Prelude.putStrLn $ (show (e :: SomeException))
+                                                                                              return $ Left ())
                                                        return resp
                           maybeR <- jokeresponse
                           case maybeR of
@@ -542,6 +671,6 @@ eventHandler ctok nasatok (InteractionCreate interaction) =
                                                  case r of
                                                   Left e -> lift $ Prelude.putStrLn (show e)
                                                   Right _ -> return ()
-            t         -> lift $ TIO.putStrLn $ "Command user entered = " `T.append` t
+            t         -> lift $ TIO.putStrLn $ "Command user entered = " <> t
         _ -> lift $ TIO.putStrLn "Different type of app comm data"
     _ -> lift $ TIO.putStrLn "Different type of interaction"
